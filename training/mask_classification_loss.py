@@ -44,6 +44,10 @@ class MaskClassificationLoss(Mask2FormerLoss):
         empty_weight[-1] = self.eos_coef
         self.register_buffer("empty_weight", empty_weight)
 
+        # --- NOVELTY: Entropy Coefficient ---
+        self.entropy_coefficient = 0.05
+        # ------------------------------------
+
         self.matcher = Mask2FormerHungarianMatcher(
             num_points=num_points,
             cost_mask=mask_coefficient,
@@ -75,8 +79,41 @@ class MaskClassificationLoss(Mask2FormerLoss):
 
         return {**loss_masks, **loss_classes}
 
+    # def loss_masks(self, masks_queries_logits, mask_labels, indices):
+    #     loss_masks = super().loss_masks(masks_queries_logits, mask_labels, indices, 1)
+
+    #     num_masks = sum(len(tgt) for (_, tgt) in indices)
+    #     num_masks_tensor = torch.as_tensor(
+    #         num_masks, dtype=torch.float, device=masks_queries_logits.device
+    #     )
+
+    #     if dist.is_available() and dist.is_initialized():
+    #         dist.all_reduce(num_masks_tensor)
+    #         world_size = dist.get_world_size()
+    #     else:
+    #         world_size = 1
+
+    #     num_masks = torch.clamp(num_masks_tensor / world_size, min=1)
+
+    #     for key in loss_masks.keys():
+    #         loss_masks[key] = loss_masks[key] / num_masks
+
+    #     return loss_masks
+
+    #Updated loss mask function (novelty 1)
     def loss_masks(self, masks_queries_logits, mask_labels, indices):
         loss_masks = super().loss_masks(masks_queries_logits, mask_labels, indices, 1)
+
+        # --- NOVELTY INJECTION: ENTROPY REGULARIZATION ---
+        # 1. Convert logits to probabilities
+        probs = torch.sigmoid(masks_queries_logits)
+        # 2. Prevent log(0) NaN errors
+        eps = 1e-8
+        # 3. Calculate binary entropy and take the mean
+        entropy = -probs * torch.log(probs + eps) - (1 - probs) * torch.log(1 - probs + eps)
+        # 4. Add to the dictionary so the parent trainer can track it
+        loss_masks["loss_entropy"] = entropy.mean()
+        # -------------------------------------------------
 
         num_masks = sum(len(tgt) for (_, tgt) in indices)
         num_masks_tensor = torch.as_tensor(
@@ -95,7 +132,7 @@ class MaskClassificationLoss(Mask2FormerLoss):
             loss_masks[key] = loss_masks[key] / num_masks
 
         return loss_masks
-
+    
     def loss_total(self, losses_all_layers, log_fn) -> torch.Tensor:
         loss_total = None
         for loss_key, loss in losses_all_layers.items():
@@ -107,6 +144,10 @@ class MaskClassificationLoss(Mask2FormerLoss):
                 weighted_loss = loss * self.dice_coefficient
             elif "cross_entropy" in loss_key:
                 weighted_loss = loss * self.class_coefficient
+            # --- NOVELTY INJECTION: HANDLE ENTROPY LOSS ---
+            elif "entropy" in loss_key:
+                weighted_loss = loss * self.entropy_coefficient
+            # ----------------------------------------------
             else:
                 raise ValueError(f"Unknown loss key: {loss_key}")
 
