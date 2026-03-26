@@ -20,7 +20,7 @@ model:
         encoder:
           class_path: models.vit.ViT
 data:
-  class_path: datasets.coco.COCO
+  class_path: local_datasets.coco.COCO
   init_args:
     path: /kaggle/input/datasets/awsaf49/coco-2017-dataset/coco2017
     # If the file requires other args like batch_size, add them here too:
