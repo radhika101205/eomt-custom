@@ -21,3 +21,10 @@ model:
           class_path: models.vit.ViT
 data:
   class_path: datasets.coco.COCO
+  init_args:
+    # Add this line here
+    path: /kaggle/input/datasets/awsaf49/coco-2017-dataset/coco2017
+    # If the file requires other args like batch_size, add them here too:
+    batch_size: 16
+    num_workers: 4
+  
