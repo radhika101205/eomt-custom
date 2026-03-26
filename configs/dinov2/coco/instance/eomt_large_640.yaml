@@ -20,7 +20,7 @@ model:
         encoder:
           class_path: models.vit.ViT
 data:
-  class_path: local_datasets.coco.COCO
+  class_path: eomt_datasets.coco.COCO
   init_args:
     # Add this line here
     path: /kaggle/input/datasets/awsaf49/coco-2017-dataset/coco2017
