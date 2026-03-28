@@ -107,7 +107,23 @@ class MaskClassificationInstance(LightningModule):
 
             preds, targets_ = [], []
             for j in range(len(mask_logits)):
+                # 1. Get raw probabilities
                 scores = class_logits[j].softmax(dim=-1)[:, :-1]
+            
+                # --- NOVELTY START: CONFIDENCE-BASED QUERY PRUNING ---
+                # We identify queries that are actually confident (> 70%)
+                conf_scores, _ = scores.max(dim=-1)
+                keep = conf_scores > 0.7  # The 0.7 threshold from our simulation
+                
+                # Prune the scores and mask logits before any heavy processing
+                scores = scores[keep]
+                mask_logits[j] = mask_logits[j][keep]
+                
+                # If no queries pass the threshold, we skip this image to save time
+                if scores.shape[0] == 0:
+                    preds.append(dict(masks=torch.empty(0), labels=torch.empty(0), scores=torch.empty(0)))
+                    continue
+                # --- NOVELTY END ---
                 labels = (
                     torch.arange(scores.shape[-1], device=self.device)
                     .unsqueeze(0)
